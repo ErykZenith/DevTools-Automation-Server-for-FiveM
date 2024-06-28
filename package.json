@@ -1,0 +1,15 @@
+{
+	"dependencies": {
+		"chokidar": "^3.6.0",
+		"connect": "^3.7.0",
+		"connect-livereload": "^0.6.1",
+		"event-stream": "^4.0.1",
+		"express": "^4.19.2",
+		"faye-websocket": "^0.11.4",
+		"livereload": "^0.9.3",
+		"morgan": "^1.10.0",
+		"send": "^0.18.0",
+		"serve-index": "^1.9.1",
+		"ws": "^8.17.1"
+	}
+}

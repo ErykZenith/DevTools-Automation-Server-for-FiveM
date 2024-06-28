@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<body>
+    <script type="text/javascript">
+        const GetWindowFromScriptName = (scriptName) => {
+            const iframe = window.parent.document.body.querySelector(`iframe[name='${scriptName}']`);
+            const iframeWindow = iframe.contentWindow;
+            return iframeWindow;
+        };
+
+        const Post = async (url, data) => {
+            const options = {
+                method: 'POST',
+                body: JSON.stringify(data || {}),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+            try {
+                await fetch(url, options);
+            } catch (error) {
+                throw error;
+            }
+        };
+    </script>
+    <script src="./script.js"></script>
+</body>
+
+</html>
