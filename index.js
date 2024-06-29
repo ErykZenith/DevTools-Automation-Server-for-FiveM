@@ -4,12 +4,13 @@ const express = require('express');
 const livereload = require('livereload');
 const connectLiveReload = require('connect-livereload');
 const chokidar = require('chokidar');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const currentWorkingDir = process.cwd();
 const SERVER_PORT = 6900;
 const readlineInterface = readline.createInterface({ input: process.stdin, output: process.stdout });
-let webSocketConnection, httpServer, networkMonitorHandler, isConnected = false, isLoggingActive = true, jsonConfig = {};
+let webSocketConnection, httpServer, networkMonitorHandler, isConnected = false, isLoggingActive = true, jsonConfig = {}
 const displayCommands = () => {
     console.clear();
     console.log(` \x1b[36m:Available Commands:\x1b[0m\n \x1b[33mnet 0\x1b[0m - Stop Network Monitoring\n \x1b[33mnet 1\x1b[0m - Start Network Monitoring\n \x1b[33mnet 2\x1b[0m - Toggle Network Monitoring\n \x1b[33mdmp\x1b[0m - Dump JavaScript Files`);
@@ -62,34 +63,60 @@ const terminateServer = () => {
     if (!httpServer) return;
     httpServer.close(() => httpServer = undefined);
 };
-const establishWebSocketConnection = () => {
+const establishWebSocketConnection = async () => {
     if (isConnected) return console.log(' -\x1b[36mConnection already established\x1b[0m');
-    readlineInterface.question(' \x1b[36mEnter DevTools ID:\x1b[0m ', devToolsID => {
-        webSocketConnection = new WebSocket(`ws://localhost:13172/devtools/page/${devToolsID}`);
-        webSocketConnection.on('open', () => {
-            isConnected = true;
-            displayCommands();
-            console.log(' -\x1b[36mConnected to DevTools\x1b[0m');
-            initializeServer();
+    try {
+        const options = {
+            hostname: 'localhost',
+            port: 13172,
+            path: '/json/list',
+            method: 'GET'
+        };
+        const req = http.request(options, async (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            res.on('end', async () => {
+                try {
+                    const jsonData = JSON.parse(data);
+                    const id = jsonData[0].id;
+                    webSocketConnection = new WebSocket(`ws://localhost:13172/devtools/page/${id}`);
+                    webSocketConnection.onopen = () => {
+                        isConnected = true;
+                        displayCommands();
+                        console.log(' -\x1b[36mConnected to DevTools\x1b[0m');
+                        initializeServer();
+                    };
+                    webSocketConnection.onclose = () => {
+                        isConnected = false;
+                        console.clear();
+                        console.error('  -\x1b[31mDisconnected from DevTools\x1b[0m');
+                        terminateServer();
+                        establishWebSocketConnection();
+                    };
+                    webSocketConnection.onerror = () => {
+                        isConnected = false;
+                    };
+                } catch (error) {
+                    console.error("Error parsing JSON:", error);
+                }
+            });
         });
-        webSocketConnection.on('close', () => {
-            isConnected = false;
-            console.clear();
-            console.error('  -\x1b[31mDisconnected from DevTools\x1b[0m');
-            terminateServer();
-            establishWebSocketConnection();
+        req.on('error', (error) => {
+            console.error("Error making HTTP request:", error);
         });
-        webSocketConnection.on('error', () => {
-            isConnected = false;
-        });
-    });
+        req.end();
+    } catch (error) {
+        console.error("Please enter the server first.");
+        setTimeout(establishWebSocketConnection, 1000);
+    }
 };
 const dumpJavaScriptFiles = () => {
     displayCommands();
     console.log('\n -\x1b[36mDumping JavaScript files started\x1b[0m\n');
     const scriptFileIds = new Map();
     let currentRequestId = 1;
-
     const handleScriptContent = (scriptId, scriptContent, scriptUrl) => {
         const sanitizedFileName = scriptUrl.replace(/[<>:"/\\|?*]+/g, '_');
         const outputDirectory = path.join(currentWorkingDir, 'dumped_scripts');
@@ -134,8 +161,8 @@ const initiateNetworkMonitoring = () => {
         if (!isLoggingActive) return;
         const message = JSON.parse(data);
         if (message.method === 'Network.requestWillBeSent' && message.params.request.postData) {
-            if (jsonConfig.HideNetwork){
-                if (jsonConfig.HideNetwork.some(entry => entry === message.params.request.url))return;
+            if (jsonConfig.HideNetwork) {
+                if (jsonConfig.HideNetwork.some(entry => entry === message.params.request.url)) return;
             }
             console.log(`\n\n  -\x1b[36mIntercepted Request\x1b[0m`);
             console.log(`\n   -\x1b[33mURL:\x1b[0m ${message.params.request.url}`);
